@@ -1,0 +1,118 @@
+18:10:08 192.168.68.52 test-from-mac 18:10:08
+19:39:56 192.168.68.62 [adgate11] ---- adgatedylib v11 install ----
+19:39:56 192.168.68.62 [adgate11] install done; verify: showRewardAd IMP=0x105304ec0 btnUpdate IMP=0x105305034
+19:39:56 192.168.68.62 [adgate11] classes: vwSideMenu=0x104f08ad8 vwMain=0x104f12900 vwSubsAdRemove=0x104f10758
+19:39:56 192.168.68.62 [adgate11] swizzled -[targetapp.vwSubsAdRemove btnDoSubscription_OnClick:]
+19:39:56 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu IntertitialAdFinish:]
+19:39:56 192.168.68.62 [adgate11] swizzled -[targetapp.vwMain UpdateCamComplete:]
+19:39:56 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdFinish:]
+19:39:56 192.168.68.62 [adgate11] swizzled -[targetapp.vwMain showRewardAd:]
+19:39:56 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdAbort:]
+19:39:56 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu btnUpdateCam_OnClick:]
+19:39:56 192.168.68.62 [adgate11] swizzled -[__NSURLSessionLocal dataTaskWithRequest:completionHandler:]
+19:39:56 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdFail:]
+19:39:56 192.168.68.62 [adgate11] install skipped (already done)
+19:39:57 192.168.68.62 [adgate11] HTTP> @ @
+     body=@
+19:39:57 192.168.68.62 [adgate11] HTTP< 200 @ err=@ data=@
+19:40:03 192.168.68.62 [adgate11] swizzled -[targetapp.vwMain showRewardAd:]
+19:40:03 192.168.68.62 [adgate11] ---- adgatedylib v11 install ----
+19:40:03 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu IntertitialAdFinish:]
+19:40:03 192.168.68.62 [adgate11] swizzled -[targetapp.vwMain UpdateCamComplete:]
+19:40:03 192.168.68.62 [adgate11] install done; verify: showRewardAd IMP=0x1059e0ec0 btnUpdate IMP=0x1059e1034
+19:40:03 192.168.68.62 [adgate11] install skipped (already done)
+19:40:03 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu btnUpdateCam_OnClick:]
+19:40:03 192.168.68.62 [adgate11] swizzled -[targetapp.vwSubsAdRemove btnDoSubscription_OnClick:]
+19:40:03 192.168.68.62 [adgate11] classes: vwSideMenu=0x105530ad8 vwMain=0x10553a900 vwSubsAdRemove=0x105538758
+19:40:03 192.168.68.62 [adgate11] swizzled -[__NSURLSessionLocal dataTaskWithRequest:completionHandler:]
+19:40:03 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdFinish:]
+19:40:03 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdFail:]
+19:40:03 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdAbort:]
+19:40:04 192.168.68.62 [adgate11] HTTP> @ @
+     body=@
+19:40:04 192.168.68.62 [adgate11] HTTP< 200 @ err=@ data=@
+19:40:08 192.168.68.62 [adgate11] == [@ btnUpdateCam_OnClick:] 使用者按下更新照相點
+19:40:08 192.168.68.62 [adgate11] == [@ showRewardAd:] 收到 ADMOD_REWARD_SHOW（��W）
+19:40:08 192.168.68.62 [adgate11] post REWARD_AD_FINISH (showRewardAd 被叫用 → 直接完成)
+19:40:08 192.168.68.62 [adgate11] == [@ RewardAdFinish:] 進入更新流程（sender=@）
+19:40:08 192.168.68.62 [adgate11] HTTP> @ @
+     body=@
+19:40:08 192.168.68.62 [adgate11] HTTP< 200 @ err=@ data=@
+19:40:08 192.168.68.62 [adgate11] alert presented
+19:40:08 192.168.68.62 [adgate11] == [@ UpdateCamComplete:] 照相點更新完成事件
+19:40:09 192.168.68.62 [adgate11] post REWARD_AD_FINISH (btnUpdate 後備觸發)
+19:40:09 192.168.68.62 [adgate11] == [@ RewardAdFinish:] 進入更新流程（sender=@）
+19:40:09 192.168.68.62 [adgate11] HTTP> @ @
+     body=@
+19:40:09 192.168.68.62 [adgate11] HTTP< 200 @ err=@ data=@
+19:40:14 192.168.68.62 [adgate11] !! [@ RewardAdFail:]（原本要顯示『無法開啟廣告』）→ 改走完成流程
+19:40:14 192.168.68.62 [adgate11] post REWARD_AD_FINISH (RewardAdFail 被攔截)
+19:40:14 192.168.68.62 [adgate11] == [@ RewardAdFinish:] 進入更新流程（sender=@）
+19:40:14 192.168.68.62 [adgate11] HTTP> @ @
+     body=@
+19:40:14 192.168.68.62 [adgate11] HTTP< 200 @ err=@ data=@
+19:40:18 192.168.68.62 [adgate11] HTTP> @ @
+     body=@
+19:40:18 192.168.68.62 [adgate11] HTTP< 200 @ err=@ data=@
+19:40:25 192.168.68.62 [adgate11] post REWARD_AD_FINISH (showRewardAd 被叫用 → 直接完成)
+19:40:25 192.168.68.62 [adgate11] == [@ btnUpdateCam_OnClick:] 使用者按下更新照相點
+19:40:25 192.168.68.62 [adgate11] == [@ showRewardAd:] 收到 ADMOD_REWARD_SHOW（��W）
+19:40:25 192.168.68.62 [adgate11] == [@ RewardAdFinish:] 進入更新流程（sender=@）
+19:40:25 192.168.68.62 [adgate11] HTTP> @ @
+     body=@
+19:40:25 192.168.68.62 [adgate11] HTTP< 200 @ err=@ data=@
+19:40:26 192.168.68.62 [adgate11] post REWARD_AD_FINISH (btnUpdate 後備觸發)
+19:40:26 192.168.68.62 [adgate11] == [@ RewardAdFinish:] 進入更新流程（sender=@）
+19:40:26 192.168.68.62 [adgate11] HTTP> @ @
+     body=@
+19:40:27 192.168.68.62 [adgate11] HTTP< 200 @ err=@ data=@
+19:41:09 192.168.68.62 [adgate11] classes: vwSideMenu=0x105940ad8 vwMain=0x10594a900 vwSubsAdRemove=0x105948758
+19:41:09 192.168.68.62 [adgate11] ---- adgatedylib v11 install ----
+19:41:09 192.168.68.62 [adgate11] swizzled -[targetapp.vwMain UpdateCamComplete:]
+19:41:09 192.168.68.62 [adgate11] swizzled -[targetapp.vwMain showRewardAd:]
+19:41:09 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdFail:]
+19:41:09 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu btnUpdateCam_OnClick:]
+19:41:09 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdAbort:]
+19:41:09 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdFinish:]
+19:41:09 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu IntertitialAdFinish:]
+19:41:09 192.168.68.62 [adgate11] swizzled -[targetapp.vwSubsAdRemove btnDoSubscription_OnClick:]
+19:41:09 192.168.68.62 [adgate11] install done; verify: showRewardAd IMP=0x105dc8ec0 btnUpdate IMP=0x105dc9034
+19:41:09 192.168.68.62 [adgate11] swizzled -[__NSURLSessionLocal dataTaskWithRequest:completionHandler:]
+19:41:09 192.168.68.62 [adgate11] install skipped (already done)
+19:41:10 192.168.68.62 [adgate11] HTTP> @ @
+     body=@
+19:41:10 192.168.68.62 [adgate11] HTTP< 200 @ err=@ data=@
+19:41:15 192.168.68.62 [adgate11] ---- adgatedylib v11 install ----
+19:41:15 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdFinish:]
+19:41:15 192.168.68.62 [adgate11] swizzled -[targetapp.vwMain showRewardAd:]
+19:41:15 192.168.68.62 [adgate11] swizzled -[targetapp.vwMain UpdateCamComplete:]
+19:41:15 192.168.68.62 [adgate11] classes: vwSideMenu=0x103244ad8 vwMain=0x10324e900 vwSubsAdRemove=0x10324c758
+19:41:15 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdFail:]
+19:41:15 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdAbort:]
+19:41:15 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu IntertitialAdFinish:]
+19:41:15 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu btnUpdateCam_OnClick:]
+19:41:15 192.168.68.62 [adgate11] install done; verify: showRewardAd IMP=0x1037d0ec0 btnUpdate IMP=0x1037d1034
+19:41:15 192.168.68.62 [adgate11] swizzled -[targetapp.vwSubsAdRemove btnDoSubscription_OnClick:]
+19:41:15 192.168.68.62 [adgate11] swizzled -[__NSURLSessionLocal dataTaskWithRequest:completionHandler:]
+19:41:15 192.168.68.62 [adgate11] install skipped (already done)
+19:41:16 192.168.68.62 [adgate11] HTTP> @ @
+     body=@
+19:41:16 192.168.68.62 [adgate11] HTTP< 200 @ err=@ data=@
+19:41:21 192.168.68.62 [adgate11] alert presented
+19:41:24 192.168.68.62 [adgate11] ---- adgatedylib v11 install ----
+19:41:24 192.168.68.62 [adgate11] swizzled -[targetapp.vwMain showRewardAd:]
+19:41:24 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdFail:]
+19:41:24 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu btnUpdateCam_OnClick:]
+19:41:24 192.168.68.62 [adgate11] classes: vwSideMenu=0x101a74ad8 vwMain=0x101a7e900 vwSubsAdRemove=0x101a7c758
+19:41:24 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdFinish:]
+19:41:24 192.168.68.62 [adgate11] swizzled -[targetapp.vwMain UpdateCamComplete:]
+19:41:24 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu RewardAdAbort:]
+19:41:24 192.168.68.62 [adgate11] swizzled -[targetapp.vwSideMenu IntertitialAdFinish:]
+19:41:24 192.168.68.62 [adgate11] swizzled -[targetapp.vwSubsAdRemove btnDoSubscription_OnClick:]
+19:41:24 192.168.68.62 [adgate11] swizzled -[__NSURLSessionLocal dataTaskWithRequest:completionHandler:]
+19:41:24 192.168.68.62 [adgate11] install done; verify: showRewardAd IMP=0x1020fcec0 btnUpdate IMP=0x1020fd034
+19:41:24 192.168.68.62 [adgate11] install skipped (already done)
+19:41:25 192.168.68.62 [adgate11] HTTP> @ @
+     body=@
+19:41:25 192.168.68.62 [adgate11] HTTP< 200 @ err=@ data=@
+19:41:29 192.168.68.62 [adgate11] alert presented
