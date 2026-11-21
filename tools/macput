@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# macput LOCAL REMOTE — upload file/dir to the Mac target (auto password)
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec python3 "$DIR/_scp_pty.py" put "$@"
