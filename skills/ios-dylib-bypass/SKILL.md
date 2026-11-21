@@ -168,17 +168,41 @@ codesign -f -s - OUT.dylib
 | 越獄 | `DYLD_INSERT_LIBRARIES`、`TrollStore`、或 Frida(`Module.load`) |
 | 想自己做未簽名 IPA | 可以:補 `LC_LOAD_DYLIB` **絕對路徑**、把 dylib 放進 `Frameworks/`,重新 `zip` 成 `.ipa`,**不簽名**交付(相對路徑會被 dyld 拒) |
 
-## 第 6 步:實機驗證(未越獄 iPhone)
+## 第 6 步:實機驗證與 debug(未越獄 iPhone)
 
-| 目的 | 做法 |
-|---|---|
-| 即時確認 dylib 是否載入 | dylib 內 UDP beacon,或第一版用彈窗(注意鐵律 8 的 ABI 風險) |
-| 崩潰定位 | `xcrun devicectl device copy from --device <id> --domain-type systemCrashLogs --source . --destination <dir>`,讀 `.ips` 的 backtrace(**最可靠的管道**) |
-| 系統日誌 | `sudo log collect --device-udid <UDID> --last 20m --size 60m --output x.logarchive`(必須 root;`--predicate` 對實機無效);新版 macOS 的 `log show` 讀不了版本 6 → `find x.logarchive -name "*.tracev3" -exec strings -a {} + \| grep <kw>` |
-| 網路行為 | swizzle `NSURLSession` / `NSURLConnection` 的 `dataTaskWithRequest:completionHandler:` **只記錄不改內容**(偽造回應會破壞 App 自己的下載) |
+### 6-1 先分流:症狀 → 幾乎確定的原因 → 動作
 
-> `devicectl` 在部分 iOS 版本不可靠:`device info apps` / `info processes` 回 0 筆、`--domain-type appDataContainer` 回 `ContainerLookupErrorDomain -1`、`device process launch` 報 not installed。
-> **不要把這些空結果當成「App 沒安裝」的證據**;改用 logarchive 字串(bundle container、SpringBoard scene)判斷。
+| 症狀 | 幾乎可以確定的原因 | 動作 |
+|---|---|---|
+| **完全沒有訊號**(沒 beacon / 沒 log / 沒彈窗),App 卻正常 | **dylib 根本沒被載入**:注入沒生效、dylib 沒進 `Frameworks/`、`LC_LOAD_DYLIB` 沒補或補了相對路徑、簽名流程把 dylib 丟掉 | ① 對交付檔案 `strings -a x.dylib \| grep <beacon 標記>` 確認標記真的在;② 拆開交付的 IPA:`unzip -l x.ipa \| grep -i dylib`、反組譯主二進位確認 `LC_LOAD_DYLIB` 是**絕對路徑**;③ 抓 `.ips`:`termination.reasons` 若出現 `Library not loaded`(相對路徑會寫 `relative path not allowed in hardened program`)→ 就是載入失敗;④ 換一種注入/簽名方式再測 |
+| **一啟動就閃退** | hook 造成例外。最常見:`objc_msgSend` 轉型與簽章不符 → `doesNotRecognizeSelector:` → SIGABRT;swizzle 到不存在的方法;`orig` 被覆寫成自己 → 無限遞迴 | 抓 `.ips` 讀 backtrace:看 `exception.signal` 與 crash frame **是否落在你的 dylib**(落在 → 就是你的 hook;落在 UIKit/StoreKit → 你的 hook 逼出了別人的路徑) |
+| **用一陣子才閃退** | 延遲觸發的副作用:`dispatch_after` 計時器、彈窗(UIKit + AutoLayout)、週期性重掃 | 第一版**不要放**彈窗/計時器/週期重掃,先只留 hook + beacon;確認穩定後再一項一項加回來,加到哪一項閃退就是它 |
+| **有 beacon,但按鍵功能沒生效** | 閘門判斷錯:掛到不在 ObjC method list 的方法(靜默失敗)、事件沒被觸發、或流程在更下游被擋 | 看 beacon 的**事件序列**是否照預期走(缺哪一步就是斷點);打開 HTTP 記錄(6-3)確認請求有沒有發出去、誰回的 |
+| **功能生效但跑兩輪** | 補發事件沒去重,或「後備觸發」與正常路徑同時命中 | in-flight 旗標 + 完成事件清旗標,時間窗 10–15 秒 |
+| **原本的錯誤訊息還在**(例:「無法開啟廣告」) | 沒攔到真正入口,或 App 走另一條路徑 | 用 xref 回頭列出該錯誤字串的**所有**引用點,逐一 hook;或在最上游的 `postNotification` 處就把流程改道 |
+
+### 6-2 取證管道(照可靠度排序)
+
+1. **崩潰報告(最可靠,不需要 Xcode)**
+   `xcrun devicectl device copy from --device <id> --domain-type systemCrashLogs --source . --destination <dir>`
+   讀 `.ips` 的 `exception` / `termination.reasons` / `usedImages` / backtrace。自己編的 dylib 有符號,frame 會直接寫 `你的dylib + <offset> <函式名>`。
+   只有 offset 時:對 dylib 用 `nm -n x.dylib | sort` 或反組譯工具換算(offset 相對 __TEXT 起點)。
+2. **裝置系統日誌**
+   `sudo log collect --device-udid <UDID> --last 20m --size 60m --output x.logarchive`(**必須 root**;`--predicate` 對實機被忽略)。
+   新版 macOS 的 `log show` 讀不了(version 6)→ `find x.logarchive -name "*.tracev3" -exec strings -a {} + \| grep <關鍵字>`。
+3. **dylib 自己的訊號(最省事、最先該做)**
+   UDP beacon 打回分析機/筆電(`nc -u -l 9999`)+ 寫 `NSTemporaryDirectory()/<name>.log`。**每次 hook 進入就送一行**,這是判斷「有沒有載入 + 走到哪一步」的主力。
+4. **彈窗**只能當第一版的臨時手段(鐵律 8:ABI 不一致會 SIGABRT,而且常是「用一陣子才閃退」的元凶)。
+
+### 6-3 網路層要看什麼
+
+swizzle `NSURLSession` / `NSURLConnection` 的 `dataTaskWithRequest:completionHandler:` **只記錄、不改內容**(偽造回應會破壞 App 自己的下載流程)。
+記錄:method / URL / body 前 400 字 / 回應 status + body 前 500 字。**只過濾廣告網域**(doubleclick / googleads / admob / googlesyndication),其餘全記,才看得到真正的更新請求。
+
+### 6-4 兩個常見誤判
+
+* **沒有崩潰報告 ≠ 沒事**:沒閃退本來就沒有報告,要靠 beacon 判斷是否載入。
+* **`devicectl` 的空結果不是證據**:`device info apps` / `info processes` 常回 0 筆、`--domain-type appDataContainer` 回 `ContainerLookupErrorDomain -1`、`device process launch` 報 not installed。**不要因此判定「App 沒安裝」**,改用 logarchive 字串(bundle container、SpringBoard scene、通知識別碼)判斷。
 
 ## 收尾檢查清單
 
@@ -192,6 +216,6 @@ codesign -f -s - OUT.dylib
 - [ ] 沒有任何 UIKit 依賴、`objc_msgSend` 轉型全部對得上簽章
 - [ ] `otool -l` platform 2 / `otool -L` 乾淨 / sha256 記下
 - [ ] 上傳後抓回來比 sha256;只注入一個 dylib
-- [ ] 實機:載入有 beacon、無崩潰報告、按一次只跑一輪
+- [ ] 實機:beacon 顯示已載入、無崩潰報告、按一次只跑一輪;有症狀先過 6-1 分流表,不要亂改
 
 參考實例(目標 App 2.0.9):`re/appgate/EXPERIENCE.md`、`SOLUTION.md`,可重用工具 `re/appgate/{adis,xref,objcdump2,smartdis,xssh}.py`。
