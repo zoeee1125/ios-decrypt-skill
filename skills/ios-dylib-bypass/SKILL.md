@@ -1,6 +1,6 @@
 ---
 name: ios-dylib-bypass
-description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", "subscribe to unlock X") and ship an injectable arm64 dylib that bypasses it — static analysis with capstone/hand-rolled Mach-O parsers on Linux, cross-compiling the dylib on a Mac with a patched iPhoneOS SDK, injecting on a non-jailbroken device (LCSign/sideload) or jailbroken (DYLD_INSERT_LIBRARIES/Frida), and real-device verification (UDP beacon, crash reports, log collect). Use for any "bypass this gate / remove the ad requirement / unlock this feature" job on a decrypted IPA. ALWAYS ask the user first which deliverables they want (dylib only / dylib + unsigned IPA / full portable pack) and where to save them, before doing any analysis. Always deliver UNSIGNED artifacts — never sign anything for the user, and never suggest a specific sideload or re-sign app (the user picks their own tool).
+description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", "subscribe to unlock X") and ship an injectable arm64 dylib that bypasses it — static analysis with capstone/hand-rolled Mach-O parsers on Linux, cross-compiling the dylib on a Mac with a patched iPhoneOS SDK, injecting on a non-jailbroken device (LCSign/sideload) or jailbroken (DYLD_INSERT_LIBRARIES/Frida), and real-device verification (UDP beacon, crash reports, log collect). Debug crashes and "hook not working" with a symptom-driven flow, and ALWAYS embed a self-contained crash handler (ObjC exception + signal handlers that write a crash log and beacon it on next launch) during development — it must be removed from the final delivery build. Use for any "bypass this gate / remove the ad requirement / unlock this feature" job on a decrypted IPA. ALWAYS ask the user first which deliverables they want (dylib only / dylib + unsigned IPA / full portable pack) and where to save them, before doing any analysis. Always deliver UNSIGNED artifacts — never sign anything for the user, and never suggest a specific sideload or re-sign app (the user picks their own tool).
 ---
 
 # ios-dylib-bypass
@@ -23,6 +23,7 @@ description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", 
 11. **不要把 `.o` 改 filetype 當 dylib 交付**。驗收看 `file` + `otool -l`(LC_BUILD_VERSION `platform 2` = iOS)+ `otool -L`(安裝名只能是 `/usr/lib/*`、`/System/Library/*`)。
 12. **一次只注入一個 dylib**。同一個方法被 swizzle 兩次 → `orig` 指向自己 → 無限遞迴。
 13. **交付一律「未簽名」**:只產 ① dylib,或 ② 未簽名 IPA,由使用者自行簽名 / 自行注入。**絕不代簽、不碰使用者憑證、不指定也不推薦任何重簽或側載 App(由使用者自己選)。**
+14. **開發期一律內建崩潰處理(6-0),功能正常後一定拿掉**:`.ips` 不保證有,自帶 handler 才拿得到死因;最終交付版不得保留。
 
 ## 第 0 步:交付形態與儲存點(動手前**必須先問使用者**)
 
@@ -141,6 +142,8 @@ static void ag_post_finish(const char *why) {
 
 診斷用 UDP beacon(實機沒有 console 也能看,且不受 ATS 限制):`sendto()` 到分析機的 9999,另一端 `nc -u -l 9999` 或自寫 UDP listener。
 
+**開發期必掛**:`ag_install()` 開頭先 `ag_crash_flush()`(把上次崩潰記錄 beacon 出去),再 `ag_crash_install()`(ObjC 例外 + signal handler)。完整程式碼與「交付前拿掉」的流程見 **6-0**。
+
 ## 第 4 步:編譯(在 macOS 上;Linux 做不出合法 iOS dylib)
 
 ```bash
@@ -170,6 +173,81 @@ codesign -f -s - OUT.dylib
 
 ## 第 6 步:實機驗證與 debug(未越獄 iPhone)
 
+### 6-0 內建崩潰處理(開發期**一律**掛,交付前一定拿掉)
+
+**規則:開發/驗證階段的每個 dylib 都必須掛 crash handler;等「功能跑通、連續幾輪不閃退」之後,把 handler 拿掉再編最終版**(重新 `install_name_tool` / `codesign` / 算 sha256 交付)。
+
+為什麼要自帶:`.ips` 只在真的閃退時才有;若 App 被系統殺、或 dylib 根本沒載入,沒有 handler 就只能瞎猜。自帶 handler 讓死因**留在 App 容器裡**,下次啟動由 beacon 送出來 —— 連 Mac 不在旁邊都拿得到死因。
+
+```objc
+// ---- 開發期診斷:ObjC 例外 + signal 崩潰 → 寫檔;下次啟動 beacon 出去 ----
+#include <execinfo.h>
+#include <signal.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdio.h>
+
+static char g_crashpath[512];
+static const char *ag_crash_path(void) {
+    if (!g_crashpath[0]) {
+        const char *t = getenv("TMPDIR"); if (!t) t = "/tmp";   // App 容器內
+        snprintf(g_crashpath, sizeof(g_crashpath), "%s/adgate_crash.log", t);
+    }
+    return g_crashpath;
+}
+static void ag_crash_append(const char *s, size_t n) {          // signal 內也安全
+    int fd = open(ag_crash_path(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd < 0) return; write(fd, s, n); close(fd);
+}
+
+static void ag_signal_handler(int sig) {
+    char hdr[64];
+    int n = snprintf(hdr, sizeof(hdr), "\n=== SIGNAL %d ===\n", sig);
+    if (n > (int)sizeof(hdr)) n = (int)sizeof(hdr);              // snprintf 回傳的是「想要」長度,必須夾
+    ag_crash_append(hdr, (size_t)n);
+
+    int fd = open(ag_crash_path(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd >= 0) { void *bt[64]; int c = backtrace(bt, 64); backtrace_symbols_fd(bt, c, fd); close(fd); }
+
+    signal(sig, SIG_DFL); raise(sig);                            // 保留原本的崩潰行為
+}
+
+static void ag_exception_handler(NSException *e) {               // ObjC 例外沒有 signal 限制
+    NSString *rep = [NSString stringWithFormat:@"\n=== OBJC EXCEPTION %@: %@ ===\n%@\n",
+                     e.name, e.reason, e.callStackSymbols];
+    const char *u = rep.UTF8String; if (u) ag_crash_append(u, strlen(u));
+}
+
+static void ag_crash_install(void) {
+    NSSetUncaughtExceptionHandler(&ag_exception_handler);
+    int sigs[] = {SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP};
+    for (size_t i = 0; i < sizeof(sigs)/sizeof(sigs[0]); i++) signal(sigs[i], ag_signal_handler);
+}
+
+static void ag_crash_flush(void) {                               // 啟動時把上次的死因送出來
+    const char *p = ag_crash_path();
+    int fd = open(p, O_RDONLY); if (fd < 0) return;
+    char buf[1024]; ssize_t n;
+    while ((n = read(fd, buf, sizeof(buf))) > 0) {
+        char line[1100]; int m = snprintf(line, sizeof(line), "CRASHLOG> %.*s", (int)n, buf);
+        if (m > 0) ag_beacon(line);                              // 走你原本的 beacon
+    }
+    close(fd); unlink(p);                                        // 送過就刪,避免重複回報
+}
+```
+
+| 階段 | 做什麼 |
+|---|---|
+| 開發 / 驗證 | `ag_install()` 開頭:`ag_crash_flush(); ag_crash_install();`;每個 hook 進入都 `AG(@"enter <method>")` |
+| 確認正常 | 功能跑通、連按數輪不閃退、裝置上沒有新的 `.ips` |
+| **交付前** | **移除 `ag_crash_flush()` / `ag_crash_install()` 兩個呼叫**(函式可留著不用),重編 → 重新 `install_name_tool` + `codesign` → 重新算 sha256 → 交付 |
+
+注意:
+* signal handler 裡只能用 async-signal-safe 的東西(`open`/`write`/`close`/`backtrace_symbols_fd`/`signal`/`raise`)——**不要**碰 Foundation / NSString;`snprintf` 嚴格說不在該清單,實務可用,要更保守就先填好固定 header 再 `write`。
+* ObjC 例外常式沒有限制,可用 `e.callStackSymbols`。
+* 這東西**不要留在最終交付版**:它會改變崩潰行為、也會在容器裡留檔。
+* 回報格式:`CRASHLOG> === SIGNAL 11 ===` + `backtrace_symbols_fd` 的 `image + offset symbol` 行 → 直接看得出是落在你的 dylib 哪個函式。
+
 ### 6-1 先分流:症狀 → 幾乎確定的原因 → 動作
 
 | 症狀 | 幾乎可以確定的原因 | 動作 |
@@ -183,6 +261,7 @@ codesign -f -s - OUT.dylib
 
 ### 6-2 取證管道(照可靠度排序)
 
+0. **dylib 自帶的崩潰記錄(開發期最優先,見 6-0)** — 不需要 Mac/筆電在旁邊,死因直接 beacon 回來
 1. **崩潰報告(最可靠,不需要 Xcode)**
    `xcrun devicectl device copy from --device <id> --domain-type systemCrashLogs --source . --destination <dir>`
    讀 `.ips` 的 `exception` / `termination.reasons` / `usedImages` / backtrace。自己編的 dylib 有符號,frame 會直接寫 `你的dylib + <offset> <函式名>`。
@@ -217,5 +296,6 @@ swizzle `NSURLSession` / `NSURLConnection` 的 `dataTaskWithRequest:completionHa
 - [ ] `otool -l` platform 2 / `otool -L` 乾淨 / sha256 記下
 - [ ] 上傳後抓回來比 sha256;只注入一個 dylib
 - [ ] 實機:beacon 顯示已載入、無崩潰報告、按一次只跑一輪;有症狀先過 6-1 分流表,不要亂改
+- [ ] **開發期有掛 crash handler(6-0:exception + signal);交付前已拿掉並重編、sha256 已重算**
 
 參考實例(目標 App 2.0.9):`re/appgate/EXPERIENCE.md`、`SOLUTION.md`,可重用工具 `re/appgate/{adis,xref,objcdump2,smartdis,xssh}.py`。
