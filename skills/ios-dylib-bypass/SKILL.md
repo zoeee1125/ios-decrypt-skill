@@ -1,6 +1,6 @@
 ---
 name: ios-dylib-bypass
-description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", "subscribe to unlock X") and ship an injectable arm64 dylib that bypasses it — static analysis with capstone/hand-rolled Mach-O parsers on Linux, cross-compiling the dylib on a Mac with a patched iPhoneOS SDK, injecting on a non-jailbroken device (LCSign/sideload) or jailbroken (DYLD_INSERT_LIBRARIES/Frida), and real-device verification (UDP beacon, crash reports, log collect). Use for any "bypass this gate / remove the ad requirement / unlock this feature" job on a decrypted IPA. ALWAYS ask the user first which deliverables they want (dylib only / dylib + unsigned IPA / full portable pack) and where to save them, before doing any analysis. Always deliver UNSIGNED artifacts — never sign anything for the user, and never suggest a specific sideload or re-sign app such as iLoader.
+description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", "subscribe to unlock X") and ship an injectable arm64 dylib that bypasses it — static analysis with capstone/hand-rolled Mach-O parsers on Linux, cross-compiling the dylib on a Mac with a patched iPhoneOS SDK, injecting on a non-jailbroken device (LCSign/sideload) or jailbroken (DYLD_INSERT_LIBRARIES/Frida), and real-device verification (UDP beacon, crash reports, log collect). Use for any "bypass this gate / remove the ad requirement / unlock this feature" job on a decrypted IPA. ALWAYS ask the user first which deliverables they want (dylib only / dylib + unsigned IPA / full portable pack) and where to save them, before doing any analysis. Always deliver UNSIGNED artifacts — never sign anything for the user, and never suggest a specific sideload or re-sign app (the user picks their own tool).
 ---
 
 # ios-dylib-bypass
@@ -22,7 +22,7 @@ description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", 
 10. **`LC_LOAD_DYLIB` 不能放相對路徑**(`@executable_path/...` → dyld: relative path not allowed in hardened program → SIGABRT)。手工注入 IPA 走「絕對路徑 + 未簽名交付」,簽名由使用者自理。
 11. **不要把 `.o` 改 filetype 當 dylib 交付**。驗收看 `file` + `otool -l`(LC_BUILD_VERSION `platform 2` = iOS)+ `otool -L`(安裝名只能是 `/usr/lib/*`、`/System/Library/*`)。
 12. **一次只注入一個 dylib**。同一個方法被 swizzle 兩次 → `orig` 指向自己 → 無限遞迴。
-13. **交付一律「未簽名」**:只產 ① dylib,或 ② 未簽名 IPA,由使用者自行簽名 / 自行注入。**絕不代簽、不碰使用者憑證、不指定也不推薦任何重簽或側載 App(例如 iLoader)。**
+13. **交付一律「未簽名」**:只產 ① dylib,或 ② 未簽名 IPA,由使用者自行簽名 / 自行注入。**絕不代簽、不碰使用者憑證、不指定也不推薦任何重簽或側載 App(由使用者自己選)。**
 
 ## 第 0 步:交付形態與儲存點(動手前**必須先問使用者**)
 
