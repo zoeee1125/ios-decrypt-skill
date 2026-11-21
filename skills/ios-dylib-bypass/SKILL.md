@@ -1,6 +1,6 @@
 ---
 name: ios-dylib-bypass
-description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", "subscribe to unlock X") and ship an injectable arm64 dylib that bypasses it — static analysis with capstone/hand-rolled Mach-O parsers on Linux, cross-compiling the dylib on a Mac with a patched iPhoneOS SDK, injecting on a non-jailbroken device (LCSign/sideload) or jailbroken (DYLD_INSERT_LIBRARIES/Frida), and real-device verification (UDP beacon, crash reports, log collect). Use for any "bypass this gate / remove the ad requirement / unlock this feature" job on a decrypted IPA. ALWAYS ask the user first which deliverables they want (dylib only / dylib + injected IPA / full portable pack) and where to save them, before doing any analysis.
+description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", "subscribe to unlock X") and ship an injectable arm64 dylib that bypasses it — static analysis with capstone/hand-rolled Mach-O parsers on Linux, cross-compiling the dylib on a Mac with a patched iPhoneOS SDK, injecting on a non-jailbroken device (LCSign/sideload) or jailbroken (DYLD_INSERT_LIBRARIES/Frida), and real-device verification (UDP beacon, crash reports, log collect). Use for any "bypass this gate / remove the ad requirement / unlock this feature" job on a decrypted IPA. ALWAYS ask the user first which deliverables they want (dylib only / dylib + unsigned IPA / full portable pack) and where to save them, before doing any analysis. Always deliver UNSIGNED artifacts — never sign anything for the user, and never suggest a specific sideload or re-sign app such as iLoader.
 ---
 
 # ios-dylib-bypass
@@ -19,22 +19,24 @@ description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", 
 7. **`objc_msgSend` 的函式指標轉型必須與目標簽章完全一致**(含參數個數與 variadic 與否),arm64 上不一致會 `doesNotRecognizeSelector:` → SIGABRT。零參數 selector 用 `id (*)(id, SEL)`。
 8. **不要在 hook 裡碰 UIKit**(彈窗/AlertController)。診斷改走 NSLog + 檔案 + UDP beacon。
 9. **不要用 `mprotect(..., PROT_READ|PROT_WRITE|PROT_EXEC)` 改 `__DATA`**(iOS W^X 一定失敗);`__BSS` 位址 fileoff = 0,讀檔會拿到別的 section 的內容。
-10. **`LC_LOAD_DYLIB` 不能放相對路徑**(`@executable_path/...` → dyld: relative path not allowed in hardened program → SIGABRT)。手工注入 IPA 這條路基本作廢,走重簽工具。
+10. **`LC_LOAD_DYLIB` 不能放相對路徑**(`@executable_path/...` → dyld: relative path not allowed in hardened program → SIGABRT)。手工注入 IPA 走「絕對路徑 + 未簽名交付」,簽名由使用者自理。
 11. **不要把 `.o` 改 filetype 當 dylib 交付**。驗收看 `file` + `otool -l`(LC_BUILD_VERSION `platform 2` = iOS)+ `otool -L`(安裝名只能是 `/usr/lib/*`、`/System/Library/*`)。
 12. **一次只注入一個 dylib**。同一個方法被 swizzle 兩次 → `orig` 指向自己 → 無限遞迴。
+13. **交付一律「未簽名」**:只產 ① dylib,或 ② 未簽名 IPA,由使用者自行簽名 / 自行注入。**絕不代簽、不碰使用者憑證、不指定也不推薦任何重簽或側載 App(例如 iLoader)。**
 
 ## 第 0 步:交付形態與儲存點(動手前**必須先問使用者**)
 
-**先問,再開工。** 不要自己預設,也不要「兩種都做」——注入版 IPA 會多花一輪重簽、還可能白做。
+**先問,再開工。** 不要自己預設,也不要「兩種都做」——多產未簽名 IPA 會多花一輪打包,可能白做。
+交付形態只有兩種下游:**(1) 給 dylib,使用者自己注入;(2) 給未簽名 IPA,使用者自己簽名。**我們永遠不做簽名這一步。
 用選項式提問,一次問完兩題:
 
 **Q1 要產出什麼?**
 
 | 選項 | 內容 | 適合誰 |
 |---|---|---|
-| **A. 只產 dylib** | `xxx_ios.dylib`(已 `install_name_tool -id` + ad-hoc `codesign`) | 使用者自己有重簽/側載工具(LCSign、sign.lc、Sideloadly、iLoader…),或越獄機走 `DYLD_INSERT_LIBRARIES` / Frida |
-| **B. dylib + 注入後 IPA** | A + 把 dylib 放進 `Payload/<App>.app/Frameworks/`、在 Mach-O 補 `LC_LOAD_DYLIB`、重打包 `.ipa` | 要一鍵側載;務必遵守鐵律 10(不可用相對路徑) |
-| **C. A + B + 可攜包** | 再加原始碼、分析工具、`EXPERIENCE` 文件、實機 log 的 `tar.gz` | 要交付他人 / 存檔 / 當教材 |
+| **A. 只產 dylib** | `xxx_ios.dylib`(做 `install_name_tool -id` + ad-hoc `codesign` —— 只是讓它能被載入,不等於簽 App) | **使用者自行注入**:用他自己選的重簽/側載方式,或越獄機 `DYLD_INSERT_LIBRARIES` / Frida。不要問他用哪個工具、也不要推薦 |
+| **B. dylib + 未簽名 IPA** | A + 把 dylib 放進 `Payload/<App>.app/Frameworks/`、在 Mach-O 補**絕對路徑**的 `LC_LOAD_DYLIB`、重打包成 `.ipa` —— **輸出未簽名 IPA,不簽** | 使用者想自己走一鍵簽名/側載;務必遵守鐵律 10 |
+| **C. A + B + 可攜包** | 再加原始碼、分析工具、`EXPERIENCE` 文件、實機 log 的 `tar.gz`(全部都還是未簽名) | 要交付他人 / 存檔 / 當教材 |
 
 **Q2 存到哪?**(可多選,要問清楚「哪台機器 + 哪個路徑」)
 
@@ -42,7 +44,7 @@ description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", 
 |---|---|---|
 | 分析機(Linux) | `<工作目錄>/dist/` | 直接寫檔 |
 | macOS | `~/Downloads/`(或使用者指定) | `xssh.py`(pty + base64 腳本)+ HTTP 收送檔 |
-| 手機端 App 的檔案服務 | `/Downloads/`(GCDWebUploader:`POST /upload`,multipart 欄位 `path` + `files[]`) | 上傳後 **`GET /download?path=...` 抓回來比 sha256** |
+| 手機端使用者自行架設的檔案服務 | `/Downloads/`(GCDWebUploader 介面:`POST /upload`,multipart 欄位 `path` + `files[]`) | 上傳後 **`GET /download?path=...` 抓回來比 sha256**;這只是檔案通道,不是代簽 |
 | 既有 repo / 雲端 | 使用者指定 | 用該平台的 API / CLI 推送(憑證不足時回報,別硬猜) |
 
 **預設值**(只有當使用者說「你決定」/跳過時才用):**A 形態 + 存到 macOS `~/Downloads/` 與分析機 `dist/`**。
@@ -162,9 +164,9 @@ codesign -f -s - OUT.dylib
 
 | 情境 | 做法 |
 |---|---|
-| 未越獄 + 重簽側載(實務主流) | 把 dylib 交給重簽服務/工具(App 內建 GCDWebUploader 的,多半是 `GET /list?path=`, `POST /upload`(欄位 `path` + `files[]`), `GET /download?path=`);上傳後用自己的 `download` 端點抓回來比 sha256 驗證。**只勾一個 dylib** |
+| 未越獄 + 使用者自行重簽側載(實務主流) | 把 dylib 交到使用者指定的位置,由他用自己的工具處理(**不由我方操作、不指定也不推薦工具**);若走手機端檔案服務,API:`GET /list?path=`、`POST /upload`(`path` + `files[]`)、`GET /download?path=`,上傳後抓回來比 sha256。**只勾一個 dylib** |
 | 越獄 | `DYLD_INSERT_LIBRARIES`、`TrollStore`、或 Frida(`Module.load`) |
-| 想改 IPA 手動注入 | 不要。`LC_LOAD_DYLIB` 相對路徑會被 dyld 拒;真的要做必須改絕對路徑且重簽 entitlements |
+| 想自己做未簽名 IPA | 可以:補 `LC_LOAD_DYLIB` **絕對路徑**、把 dylib 放進 `Frameworks/`,重新 `zip` 成 `.ipa`,**不簽名**交付(相對路徑會被 dyld 拒) |
 
 ## 第 6 步:實機驗證(未越獄 iPhone)
 
