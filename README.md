@@ -11,7 +11,7 @@ iOS 逆向 / 解鎖付費與廣告閘門的**可重用技能 + 實戰記憶庫**
 ## 目錄結構
 
 ```
-skills/ios-dylib-bypass/SKILL.md   技能本體(12 條鐵律 + 六步流程 + 檢查清單)
+skills/ios-dylib-bypass/SKILL.md   技能本體(第 0 步交付形態確認 + 12 條鐵律 + 六步流程 + 檢查清單)
 memory/EXPERIENCE.md               完整經驗匯出:機制、誤區、dylib 設計、編譯/部署/debug SOP
 memory/SOLUTION.md                 機制圖 + 掛鉤表 + 版本演進(v1→v13)+ 踩坑
 tools/                             自製分析工具(Linux 端,只需 python3 + capstone)
@@ -37,6 +37,13 @@ cp -r skills/ios-dylib-bypass ~/.dsh/skills/
 ```
 
 之後任何「幫我繞過某個 iOS App 的廣告/訂閱閘門」「做一個可注入的 iOS dylib」的請求都會自動載入。
+
+載入後**第一件事是問你**,不是直接開工:
+
+1. **要產出什麼?** A 只產 `dylib` / B `dylib + 注入後 IPA` / C 再加原始碼與文件的完整可攜包
+2. **要存到哪?** 分析機 `<工作目錄>/dist/`、macOS `~/Downloads/`(或自訂)、手機端 App 的檔案服務 `/Downloads/`、既有 repo/雲端
+
+你回答「你決定」時才走預設值(A + macOS `~/Downloads/` 與分析機 `dist/`);每個產物都會回報「路徑 + bytes + sha256」。
 技能本身與特定 App 無關;`case-study/` 只是完整案例,供對照與抄pattern。
 
 ## 這次案例的核心結論

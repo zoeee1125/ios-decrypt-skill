@@ -1,6 +1,6 @@
 ---
 name: ios-dylib-bypass
-description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", "subscribe to unlock X") and ship an injectable arm64 dylib that bypasses it — static analysis with capstone/hand-rolled Mach-O parsers on Linux, cross-compiling the dylib on a Mac with a patched iPhoneOS SDK, injecting on a non-jailbroken device (LCSign/sideload) or jailbroken (DYLD_INSERT_LIBRARIES/Frida), and real-device verification (UDP beacon, crash reports, log collect). Use for any "bypass this gate / remove the ad requirement / unlock this feature" job on a decrypted IPA.
+description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", "subscribe to unlock X") and ship an injectable arm64 dylib that bypasses it — static analysis with capstone/hand-rolled Mach-O parsers on Linux, cross-compiling the dylib on a Mac with a patched iPhoneOS SDK, injecting on a non-jailbroken device (LCSign/sideload) or jailbroken (DYLD_INSERT_LIBRARIES/Frida), and real-device verification (UDP beacon, crash reports, log collect). Use for any "bypass this gate / remove the ad requirement / unlock this feature" job on a decrypted IPA. ALWAYS ask the user first which deliverables they want (dylib only / dylib + injected IPA / full portable pack) and where to save them, before doing any analysis.
 ---
 
 # ios-dylib-bypass
@@ -22,6 +22,32 @@ description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", 
 10. **`LC_LOAD_DYLIB` 不能放相對路徑**(`@executable_path/...` → dyld: relative path not allowed in hardened program → SIGABRT)。手工注入 IPA 這條路基本作廢,走重簽工具。
 11. **不要把 `.o` 改 filetype 當 dylib 交付**。驗收看 `file` + `otool -l`(LC_BUILD_VERSION `platform 2` = iOS)+ `otool -L`(安裝名只能是 `/usr/lib/*`、`/System/Library/*`)。
 12. **一次只注入一個 dylib**。同一個方法被 swizzle 兩次 → `orig` 指向自己 → 無限遞迴。
+
+## 第 0 步:交付形態與儲存點(動手前**必須先問使用者**)
+
+**先問,再開工。** 不要自己預設,也不要「兩種都做」——注入版 IPA 會多花一輪重簽、還可能白做。
+用選項式提問,一次問完兩題:
+
+**Q1 要產出什麼?**
+
+| 選項 | 內容 | 適合誰 |
+|---|---|---|
+| **A. 只產 dylib** | `xxx_ios.dylib`(已 `install_name_tool -id` + ad-hoc `codesign`) | 使用者自己有重簽工具(LCSign / sign.lc / Sideloadly),或越獄機走 `DYLD_INSERT_LIBRARIES` / Frida |
+| **B. dylib + 注入後 IPA** | A + 把 dylib 放進 `Payload/<App>.app/Frameworks/`、在 Mach-O 補 `LC_LOAD_DYLIB`、重打包 `.ipa` | 要一鍵側載;務必遵守鐵律 10(不可用相對路徑) |
+| **C. A + B + 可攜包** | 再加原始碼、分析工具、`EXPERIENCE` 文件、實機 log 的 `tar.gz` | 要交付他人 / 存檔 / 當教材 |
+
+**Q2 存到哪?**(可多選,要問清楚「哪台機器 + 哪個路徑」)
+
+| 位置 | 預設路徑 | 交付方式 |
+|---|---|---|
+| 分析機(Linux) | `<工作目錄>/dist/` | 直接寫檔 |
+| macOS | `~/Downloads/`(或使用者指定) | `xssh.py`(pty + base64 腳本)+ HTTP 收送檔 |
+| 手機端 App 的檔案服務 | `/Downloads/`(GCDWebUploader:`POST /upload`,multipart 欄位 `path` + `files[]`) | 上傳後 **`GET /download?path=...` 抓回來比 sha256** |
+| 既有 repo / 雲端 | 使用者指定 | 用該平台的 API / CLI 推送(憑證不足時回報,別硬猜) |
+
+**預設值**(只有當使用者說「你決定」/跳過時才用):**A 形態 + 存到 macOS `~/Downloads/` 與分析機 `dist/`**。
+**每次交付都要回報:完整路徑 + bytes + sha256**;送到裝置或遠端後一定抓回來比對。
+使用者中途改主意 → **追加**產物就好,不要重做分析。
 
 ## 第 1 步:定位閘門(分析機,不需 Mac)
 
@@ -129,7 +155,9 @@ codesign -f -s - OUT.dylib
 * 警告 `-undefined dynamic_lookup is deprecated on iOS`、`ignoring duplicate libraries: '-lSystem'` 可忽略。
 * 驗收:`file` / `otool -l | grep -A3 LC_BUILD_VERSION`(platform 2)/ `otool -L`(只允許 `/usr/lib`、`/System/Library`)/ `shasum -a 256`。
 
-## 第 5 步:注入
+## 第 5 步:注入(依第 0 步選定形態)
+
+選了 **A** 就只到「交出 dylib + 路徑/sha256」;選了 **B/C** 才需要下面的注入與打包。
 
 | 情境 | 做法 |
 |---|---|
@@ -151,6 +179,8 @@ codesign -f -s - OUT.dylib
 
 ## 收尾檢查清單
 
+- [ ] **開工前已問清交付形態(A/B/C)與儲存點**,沒有自作主張多做或少做
+- [ ] 每個產物都回報「路徑 + bytes + sha256」;送到裝置/遠端的有抓回比對
 - [ ] 錯誤字串 → 引用點 → 函式語意,確認這就是閘門(引用次數最好 = 1)
 - [ ] 閘門是通知驅動?是否能把「等 SDK 成功」整段抽掉
 - [ ] 掛鉤的方法真的在 ObjC method list 裡(用 class/method 傾印確認)
