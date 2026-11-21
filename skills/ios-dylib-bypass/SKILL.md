@@ -32,7 +32,7 @@ description: Reverse an iOS app's ad/subscription gate ("watch an ad to use X", 
 
 | 選項 | 內容 | 適合誰 |
 |---|---|---|
-| **A. 只產 dylib** | `xxx_ios.dylib`(已 `install_name_tool -id` + ad-hoc `codesign`) | 使用者自己有重簽工具(LCSign / sign.lc / Sideloadly),或越獄機走 `DYLD_INSERT_LIBRARIES` / Frida |
+| **A. 只產 dylib** | `xxx_ios.dylib`(已 `install_name_tool -id` + ad-hoc `codesign`) | 使用者自己有重簽/側載工具(LCSign、sign.lc、Sideloadly、iLoader…),或越獄機走 `DYLD_INSERT_LIBRARIES` / Frida |
 | **B. dylib + 注入後 IPA** | A + 把 dylib 放進 `Payload/<App>.app/Frameworks/`、在 Mach-O 補 `LC_LOAD_DYLIB`、重打包 `.ipa` | 要一鍵側載;務必遵守鐵律 10(不可用相對路徑) |
 | **C. A + B + 可攜包** | 再加原始碼、分析工具、`EXPERIENCE` 文件、實機 log 的 `tar.gz` | 要交付他人 / 存檔 / 當教材 |
 
@@ -149,7 +149,8 @@ install_name_tool -id "@executable_path/Frameworks/OUT.dylib" OUT.dylib
 codesign -f -s - OUT.dylib
 ```
 
-* **SDK 前置修復**:社群 iPhoneOS `.sdk`(如 `xybp888/iOS-SDKs`)的 `.tbd` 含 `arm64e.x1-ios` 這類新架構字串,舊 `ld` 會報 `unknown architecture` / `unknown file type`。對 SDK 內所有 `.tbd`:
+* **SDK 路徑是各機不同的變數**:範例 `SDK=/Users/<user>/Downloads/iPhoneOS27.0.sdk`(社群版如 `xybp888/iOS-SDKs`)。**開工前先確認它還在**,不在就重新下載 —— 整條 `clang` 指令都靠它,沒有它無法產出 iOS dylib(只有 macOS SDK 會編出 macOS dylib,注入後不會載入)。
+* **SDK 前置修復**:社群 iPhoneOS `.sdk` 的 `.tbd` 含 `arm64e.x1-ios` 這類新架構字串,舊 `ld` 會報 `unknown architecture` / `unknown file type`。對 SDK 內所有 `.tbd`:
   `sed -i '' -E 's/arm64e\.x[0-9]+-ios/arm64-ios/g; s/arm64e\.x[0-9]+-macos/arm64-macos/g; s/arm64e\.x[0-9]+-maccatalyst/arm64-maccatalyst/g'`
 * **不要 `#import <UIKit/UIKit.h>`**:這組合常在 `UIAccelerometer.h` 等處因缺 `API_OBSOLETED` 巨集爆 18 個 error。全部改用 objc runtime 動態呼叫。
 * 警告 `-undefined dynamic_lookup is deprecated on iOS`、`ignoring duplicate libraries: '-lSystem'` 可忽略。
