@@ -11,7 +11,7 @@ iOS 逆向 / 解鎖付費與廣告閘門的**可重用技能 + 實戰記憶庫**
 ## 目錄結構
 
 ```
-skills/ios-dylib-bypass/SKILL.md   技能本體(第 0 步交付形態確認 + 12 條鐵律 + 六步流程 + 檢查清單)
+skills/ios-dylib-bypass/SKILL.md   技能本體(第 0 步交付形態確認 + 13 條鐵律 + 六步流程 + 檢查清單)
 memory/EXPERIENCE.md               完整經驗匯出:機制、誤區、dylib 設計、編譯/部署/debug SOP
 memory/SOLUTION.md                 機制圖 + 掛鉤表 + 版本演進(v1→v13)+ 踩坑
 tools/                             自製分析工具(Linux 端,只需 python3 + capstone)
@@ -40,7 +40,8 @@ cp -r skills/ios-dylib-bypass ~/.dsh/skills/
 
 載入後**第一件事是問你**,不是直接開工:
 
-1. **要產出什麼?** A 只產 `dylib` / B `dylib + 注入後 IPA` / C 再加原始碼與文件的完整可攜包
+1. **要產出什麼?** A 只產 `dylib` / B `dylib + 未簽名 IPA` / C 再加原始碼與文件的完整可攜包
+   —— 產出一律**未簽名**:dylib 交給你自行注入、IPA 交給你自行簽名;我方不代簽,也不指定/推薦任何側載 App
 2. **要存到哪?** 分析機 `<工作目錄>/dist/`、macOS `~/Downloads/`(或自訂)、手機端 App 的檔案服務 `/Downloads/`、既有 repo/雲端
 
 你回答「你決定」時才走預設值(A + macOS `~/Downloads/` 與分析機 `dist/`);每個產物都會回報「路徑 + bytes + sha256」。
@@ -58,7 +59,7 @@ cp -r skills/ios-dylib-bypass ~/.dsh/skills/
 | 最大的坑 | 1279 處 `cmn x8,#1 / b.ne` 全是 **Swift lazy-global 的 `swift_once` 守衛**,不是訂閱檢查;`RemoveADValidSub` / `isRewardMissionOk` 根本不是 ObjC 方法(掛了也沒用) |
 | 結果 | 未越獄 iPhone 16 Pro / iOS 27.0,LCSign 重簽注入後:無廣告、無錯誤、單輪完成 |
 
-## 12 條鐵律(節錄,完整見 SKILL.md)
+## 13 條鐵律(節錄,完整見 SKILL.md)
 
 1. 從「使用者看到的那句錯誤字串」下手,別先猜訂閱資料欄位
 2. 先查錯誤字串出處——若是第三方 SDK,失敗其實來自憑證不符
@@ -72,6 +73,7 @@ cp -r skills/ios-dylib-bypass ~/.dsh/skills/
 10. `LC_LOAD_DYLIB` 不能放相對路徑
 11. 不可把 `.o` 改 filetype 當 dylib 交付
 12. 一次只注入一個 dylib
+13. **交付一律未簽名**(dylib 或未簽名 IPA);不代簽、不推薦特定重簽/側載 App
 
 ## 編譯 iOS dylib(在 macOS,只需 Command Line Tools)
 
