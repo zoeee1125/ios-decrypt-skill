@@ -11,7 +11,7 @@ iOS 逆向 / 解鎖付費與廣告閘門的**可重用技能 + 實戰記憶庫**
 ## 目錄結構
 
 ```
-skills/ios-dylib-bypass/SKILL.md   技能本體(第 0 步交付形態確認 + 14 條鐵律 + 六步流程 + 6-0 內建崩潰處理 + 6-1 症狀分流 debug + 檢查清單)
+skills/ios-dylib-bypass/SKILL.md   技能本體(第 0 步交付形態確認 + 14 條鐵律 + 六步流程 + 6-0 內建崩潰處理 + 6-1 症狀分流 debug + 6-5 beacon 前提 + 檢查清單)
 memory/EXPERIENCE.md               完整經驗匯出:機制、誤區、dylib 設計、編譯/部署/debug SOP
 memory/CRASHDEBUG.md               (見 6-0)開發期崩潰處理範本:例外 + signal → 寫檔 → 下次啟動 beacon
 memory/SOLUTION.md                 機制圖 + 掛鉤表 + 版本演進(v1→v13)+ 踩坑

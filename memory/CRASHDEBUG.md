@@ -98,3 +98,18 @@ frame 有你的 dylib 名 + offset + 函式名 → 直接反組譯那個 offset 
 * `snprintf` 嚴格說不在 async-signal-safe 清單,實務可用;要更保守就先填固定 header 再 `write`。
 * ObjC 例外常式沒有這個限制,可以自由用 `e.callStackSymbols`。
 * 這東西會改變崩潰行為,別留在最終交付版。
+
+## beacon 到底什麼情況下回得來
+
+| 前提 | 說明 |
+|---|---|
+| 同一網段 | UDP 打到寫死的私有 IP → **手機和接收端必須在同一個 LAN**(同一個 Wi-Fi)。手機走 4G/5G、筆電在家 → 送不出去。手機不需要外網 |
+| 接收端開著 | `nc -u -l 9999` 綁 `0.0.0.0`。UDP 沒人聽也回成功 → **永遠無法從 App 端得知有沒有送到** |
+| iOS 區域網路權限 | iOS 14+ 需要授權:設定 → 隱私權與安全性 → 區域網路;自己重打包的 IPA 要有 `NSLocalNetworkUsageDescription` |
+| 接收端防火牆 | macOS 應用程式防火牆「封鎖所有連入」會讓 `nc` 收不到 |
+| 別只寫死一個 IP | DHCP 一換就斷;同時打候選清單 + `<subnet>.255` 廣播 |
+| App 在前景 | 被掛起就不送 |
+
+不在同一個 LAN 的替代:① USB `log collect` + `strings`(最穩、不需網路)② 公開端點 `POST https://…`(行動網路也通,注意 ATS)③ 把 payload 塞進 `NSException.reason` 再從 `.ips` 撈回。
+
+**原則:檔案是真相,beacon 是盡力送。**

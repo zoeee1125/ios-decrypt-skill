@@ -247,6 +247,7 @@ static void ag_crash_flush(void) {                               // 啟動時把
 * ObjC 例外常式沒有限制,可用 `e.callStackSymbols`。
 * 這東西**不要留在最終交付版**:它會改變崩潰行為、也會在容器裡留檔。
 * 回報格式:`CRASHLOG> === SIGNAL 11 ===` + `backtrace_symbols_fd` 的 `image + offset symbol` 行 → 直接看得出是落在你的 dylib 哪個函式。
+* `ag_beacon()` 請做成**多通道**(檔案 + 候選 IP + 子網廣播),beacon 能不能回得來的前提見 **6-5**。
 
 ### 6-1 先分流:症狀 → 幾乎確定的原因 → 動作
 
@@ -282,6 +283,44 @@ swizzle `NSURLSession` / `NSURLConnection` 的 `dataTaskWithRequest:completionHa
 
 * **沒有崩潰報告 ≠ 沒事**:沒閃退本來就沒有報告,要靠 beacon 判斷是否載入。
 * **`devicectl` 的空結果不是證據**:`device info apps` / `info processes` 常回 0 筆、`--domain-type appDataContainer` 回 `ContainerLookupErrorDomain -1`、`device process launch` 報 not installed。**不要因此判定「App 沒安裝」**,改用 logarchive 字串(bundle container、SpringBoard scene、通知識別碼)判斷。
+
+### 6-5 beacon 回傳的前提(必讀)
+
+| 前提 | 說明 |
+|---|---|
+| **同一網段** | beacon 是 raw UDP `sendto()` 到寫死的私有 IP(例:`192.168.68.52:9999`)→ **手機與接收端必須在同一個 LAN**(同一個 Wi-Fi)。手機跑 4G/5G、筆電在家 → 封包被路由器丟掉。手機**不需要外網**,只需要到那個 IP 有路由 |
+| **接收端開著** | `nc -u -l 9999`(或自寫 listener)要綁 `0.0.0.0`。UDP 沒有連線概念,**送出去就算成功**:沒人聽 `sendto()` 也回 OK → 你**永遠無法從 App 端得知有沒有送到**,必須看接收端 |
+| **iOS 區域網路權限** | iOS 14+ 對「往區網位址的流量」要使用者授權。收不到先查 **設定 → 隱私權與安全性 → 區域網路** 是否允許該 App;若是你重打包的 IPA,`Info.plist` 要有 `NSLocalNetworkUsageDescription` 才會跳授權提示 |
+| **接收端防火牆** | macOS 應用程式防火牆若設「封鎖所有連入」,`nc` 就收不到 → 放行或暫時關掉 |
+| **別只寫死一個 IP** | DHCP 換位址/換網段就斷。同時打「候選 IP 清單 + 子網廣播 `<subnet>.255`」最保險 |
+| **App 必須在前景** | beacon 由 hook/計時器觸發;App 被系統掛起就不會送 |
+| **payload 要小** | 一行一筆、每筆 < 1000 bytes,避免 IP 分片掉包 |
+
+```c
+// 多通道 beacon:檔案(永遠有效)+ 候選 IP + 子網廣播
+static const char *AG_DESTS[] = {"192.168.68.52", "192.168.68.61", "192.168.68.255"}; // 改成你的環境
+static void ag_beacon(const char *msg) {
+    ag_log_file(msg);                                  // 容器內檔案:一定寫得進去
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) return;
+    int on = 1; setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+    for (size_t i = 0; i < sizeof(AG_DESTS)/sizeof(AG_DESTS[0]); i++) {
+        struct sockaddr_in a = {0};
+        a.sin_family = AF_INET; a.sin_port = htons(9999);
+        inet_pton(AF_INET, AG_DESTS[i], &a.sin_addr);
+        sendto(fd, msg, strlen(msg), 0, (struct sockaddr *)&a, sizeof(a));  // 沒人聽也回成功
+    }
+    close(fd);
+}
+```
+
+**不在同一個 LAN 時的三條替代管道**(實務上全部同時掛):
+
+1. **USB(最穩,不需要任何網路)**:`NSLog` 會進系統日誌 → `sudo log collect --device-udid <UDID> --last 20m --size 60m --output x.logarchive` + `strings` 硬解(見 6-2 第 2 項)。
+2. **公開端點**:把 beacon 改成 `POST https://<你的收集端>`(自己的 VPS 或臨時 tunnel),只要手機有任何一條網路(含行動網路)就送得到(注意 ATS,見 6-3)。
+3. **拿崩潰報告當搬運工**:完全沒有 console 又沒網路時,`@throw [NSException exceptionWithName:@"AGDump" reason:<payload> userInfo:nil];` → payload 會直接出現在 `.ips` 的 `exception.reason`,再用 `devicectl device copy from --domain-type systemCrashLogs` 撈回。醜,但一定有效。
+
+> 判斷順序:**檔案是真相,beacon 是盡力送**。任何「只靠 UDP」的 debug 設計,只要手機一離開該 LAN 就全盲。
 
 ## 收尾檢查清單
 
